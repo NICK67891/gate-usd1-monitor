@@ -1,6 +1,10 @@
 name: USDD PSM Monitor
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'psm_monitor.py'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
