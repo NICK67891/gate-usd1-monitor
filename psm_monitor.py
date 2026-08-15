@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Auto-triggered via push
 """
 USDD PSM monitor for GitHub Actions.
 Checks PSM contract USDT balance (USDD->USDT Available) every 5 min.
