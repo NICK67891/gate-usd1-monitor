@@ -1,0 +1,43 @@
+name: USDD PSM Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  psm-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore alert state
+        uses: actions/cache/restore@v4
+        with:
+          path: .psm_alert_state
+          key: psm-alert-not-exists
+          restore-keys: |
+            psm-alert-
+
+      - name: Run PSM monitor
+        run: python psm_monitor.py
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          THRESHOLD: '20000000'
+
+      - name: Save alert state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .psm_alert_state
+          key: psm-alert-state-${{ github.run_id }}-${{ github.run_attempt }}
