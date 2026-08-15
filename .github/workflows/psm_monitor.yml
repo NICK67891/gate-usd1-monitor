@@ -37,7 +37,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-          THRESHOLD: '999999999999'
+          THRESHOLD: '20000000'
 
       - name: Save alert state
         if: always()
