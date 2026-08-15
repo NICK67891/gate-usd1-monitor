@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Test run: 2026-08-15 17:16:07
+# Force alert test: 17:22:51
 """
 USDD PSM monitor for GitHub Actions.
 Checks PSM contract USDT balance (USDD->USDT Available) every 5 min.
