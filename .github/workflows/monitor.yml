@@ -1,8 +1,6 @@
 name: USD1 Monitor
 
 on:
-  push:
-    branches: [main]
   schedule:
     # 每 5 分钟启动一次；配合 concurrency 自动取消上一轮，实现近乎连续的云端监控
     - cron: "*/5 * * * *"
@@ -41,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_MINUTES: ${{ github.event.inputs.run_minutes || '4' }}
-          TEST_NOTIFY: ${{ github.event.inputs.test_notify || '1' }}
+          TEST_NOTIFY: ${{ github.event.inputs.test_notify || '0' }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
