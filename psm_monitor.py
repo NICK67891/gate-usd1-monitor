@@ -23,7 +23,7 @@ USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 TRONGRID_URL = f"https://api.trongrid.io/v1/accounts/{PSM_CONTRACT}"
 USDD_API_URL = "https://openapi.usdd.io/api/v1/data-platform/latest-collateral?chain=tron"
 
-THRESHOLD = 999999999999  # TEMP TEST MODE - force alert
+THRESHOLD = int(os.environ.get("THRESHOLD", "20000000"))
 USDT_DECIMALS = 6
 
 COOLDOWN_SECONDS = 1800  # 30 min
