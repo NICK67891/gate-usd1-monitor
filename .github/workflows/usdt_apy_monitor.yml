@@ -23,14 +23,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Restore alert state
-        uses: actions/cache/restore@v4
-        with:
-          path: .usdt_apy_alert_state
-          key: usdt-apy-alert-not-exists
-          restore-keys: |
-            usdt-apy-alert-
-
       - name: Run USDT APY monitor
         run: python usdt_apy_monitor.py
         env:
@@ -38,10 +30,3 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           APY_THRESHOLD: '0.05'
-
-      - name: Save alert state
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .usdt_apy_alert_state
-          key: usdt-apy-alert-state-${{ github.run_id }}-${{ github.run_attempt }}
