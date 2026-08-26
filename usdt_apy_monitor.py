@@ -8,8 +8,9 @@ runner IPs (403). Direct fetch is tried first (works locally / from
 WorkBuddy sandbox); if it fails, the request is routed through the
 r.jina.ai reader proxy as fallback.
 
-Alert policy: sends one email per run while APY exceeds the threshold.
-With the 5-minute cron schedule this means a reminder every 5 minutes.
+Alert policy: sends one email per check while APY exceeds the threshold.
+The workflow runs a 5-minute check loop (self-chaining sessions), so this
+means a reminder every 5 minutes.
 
 Secrets required: SMTP_USER / SMTP_PASS / MAIL_TO (same as psm_monitor).
 """

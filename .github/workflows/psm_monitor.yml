@@ -1,47 +1,76 @@
 name: USDD PSM Monitor
 
+# True 5-minute monitoring via self-chaining sessions (same pattern as
+# usdt_apy_monitor.yml - GitHub throttles */5 cron to ~90+ min intervals).
+#   1. Each session runs a ~5h40m loop checking PSM USDT balance every 5 min.
+#   2. The session dispatches the next one via GITHUB_TOKEN (workflow_dispatch
+#      always creates a run - documented exception).
+#   3. Cron at :30 acts as watchdog (offset from the USDT monitor's :00).
+# Alert cooldown (30 min) lives in .psm_alert_state and persists across the
+# whole session loop, so at most one alert email per 30 minutes.
+
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'psm_monitor.py'
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '30 * * * *'  # watchdog only; real pace comes from chaining
   workflow_dispatch:
+    inputs:
+      from_run:
+        description: 'run_number of the session that dispatched this one'
+        required: false
+        default: ''
+
+permissions:
+  actions: write  # query active runs + dispatch next session
+  contents: read  # checkout
 
 jobs:
   psm-monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+    timeout-minutes: 355  # hard cap is 360 (6h); loop itself is ~5h40m
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Deduplicate (skip if another session is already active)
+        id: dedup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MY_RUN="${{ github.run_number }}"
+          FROM_RUN="${{ github.event.inputs.from_run || '0' }}"
+          ACTIVE=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/psm_monitor.yml/runs?per_page=30" \
+            | jq --argjson my "$MY_RUN" --argjson from "$FROM_RUN" \
+              '[.workflow_runs[] | select(.run_number != $my and .run_number != $from and (.status == "in_progress" or .status == "queued" or .status == "waiting"))] | length')
+          echo "active sessions: $ACTIVE (my=$MY_RUN dispatched_by=$FROM_RUN)"
+          echo "active=$ACTIVE" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+        if: steps.dedup.outputs.active == '0'
+      - uses: actions/setup-python@v5
+        if: steps.dedup.outputs.active == '0'
         with:
           python-version: '3.12'
 
-      - name: Restore alert state
-        uses: actions/cache/restore@v4
-        with:
-          path: .psm_alert_state
-          key: psm-alert-not-exists
-          restore-keys: |
-            psm-alert-
-
-      - name: Run PSM monitor
-        run: python psm_monitor.py
+      - name: Monitor loop (check every 5 minutes for ~5h40m)
+        if: steps.dedup.outputs.active == '0'
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           THRESHOLD: '20000000'
+        run: |
+          END=$((SECONDS + 20400))
+          while [ $SECONDS -lt $END ]; do
+            python psm_monitor.py || echo "$(date -u +%FT%TZ) check failed - will retry in 5 min"
+            sleep 300
+          done
 
-      - name: Save alert state
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .psm_alert_state
-          key: psm-alert-state-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Chain next session (dispatch)
+        if: steps.dedup.outputs.active == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/psm_monitor.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"from_run\":\"${{ github.run_number }}\"}}"
+          echo "next session dispatched"
