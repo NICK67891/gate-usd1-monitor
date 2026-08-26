@@ -13,6 +13,9 @@ name: USDT APY Monitor
 #      by GITHUB_TOKEN - so the chain never breaks.
 #   3. An hourly cron acts as a watchdog: if the chain died, it starts a new
 #      full session (deduplicated away when a session is already running).
+#
+# Test mode: dispatch with test_mode=true and an overriding threshold to run
+# a single check that sends a real alert email, without touching the chain.
 
 on:
   schedule:
@@ -21,6 +24,14 @@ on:
     inputs:
       from_run:
         description: 'run_number of the session that dispatched this one'
+        required: false
+        default: ''
+      test_mode:
+        description: 'Single-shot test: one check + one real email, no dedup, no chaining'
+        type: boolean
+        default: false
+      threshold:
+        description: 'Override APY threshold as decimal (e.g. 0.04). Test only.'
         required: false
         default: ''
 
@@ -35,6 +46,7 @@ jobs:
     steps:
       - name: Deduplicate (skip if another session is already active)
         id: dedup
+        if: inputs.test_mode != true  # test runs bypass dedup on purpose
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -48,28 +60,33 @@ jobs:
           echo "active=$ACTIVE" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' || inputs.test_mode == true
       - uses: actions/setup-python@v5
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' || inputs.test_mode == true
         with:
           python-version: '3.12'
 
       - name: Monitor loop (check every 5 minutes for ~5h40m)
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' || inputs.test_mode == true
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-          APY_THRESHOLD: '0.05'
+          APY_THRESHOLD: ${{ inputs.threshold || '0.05' }}
         run: |
-          END=$((SECONDS + 20400))
-          while [ $SECONDS -lt $END ]; do
-            python usdt_apy_monitor.py || echo "$(date -u +%FT%TZ) check failed - will retry in 5 min"
-            sleep 300
-          done
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            echo "TEST MODE: single check with threshold $APY_THRESHOLD"
+            python usdt_apy_monitor.py
+          else
+            END=$((SECONDS + 20400))
+            while [ $SECONDS -lt $END ]; do
+              python usdt_apy_monitor.py || echo "$(date -u +%FT%TZ) check failed - will retry in 5 min"
+              sleep 300
+            done
+          fi
 
       - name: Chain next session (dispatch)
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' && inputs.test_mode != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

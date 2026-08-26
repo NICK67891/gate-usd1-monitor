@@ -8,6 +8,9 @@ name: USDD PSM Monitor
 #   3. Cron at :30 acts as watchdog (offset from the USDT monitor's :00).
 # Alert cooldown (30 min) lives in .psm_alert_state and persists across the
 # whole session loop, so at most one alert email per 30 minutes.
+#
+# Test mode: dispatch with test_mode=true and an overriding threshold to run
+# a single check that sends a real alert email, without touching the chain.
 
 on:
   schedule:
@@ -16,6 +19,14 @@ on:
     inputs:
       from_run:
         description: 'run_number of the session that dispatched this one'
+        required: false
+        default: ''
+      test_mode:
+        description: 'Single-shot test: one check + one real email, no dedup, no chaining'
+        type: boolean
+        default: false
+      threshold:
+        description: 'Override balance threshold in USDT (e.g. 999999999 to force). Test only.'
         required: false
         default: ''
 
@@ -30,6 +41,7 @@ jobs:
     steps:
       - name: Deduplicate (skip if another session is already active)
         id: dedup
+        if: inputs.test_mode != true  # test runs bypass dedup on purpose
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -43,28 +55,33 @@ jobs:
           echo "active=$ACTIVE" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' || inputs.test_mode == true
       - uses: actions/setup-python@v5
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' || inputs.test_mode == true
         with:
           python-version: '3.12'
 
       - name: Monitor loop (check every 5 minutes for ~5h40m)
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' || inputs.test_mode == true
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-          THRESHOLD: '20000000'
+          THRESHOLD: ${{ inputs.threshold || '20000000' }}
         run: |
-          END=$((SECONDS + 20400))
-          while [ $SECONDS -lt $END ]; do
-            python psm_monitor.py || echo "$(date -u +%FT%TZ) check failed - will retry in 5 min"
-            sleep 300
-          done
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            echo "TEST MODE: single check with threshold $THRESHOLD"
+            python psm_monitor.py
+          else
+            END=$((SECONDS + 20400))
+            while [ $SECONDS -lt $END ]; do
+              python psm_monitor.py || echo "$(date -u +%FT%TZ) check failed - will retry in 5 min"
+              sleep 300
+            done
+          fi
 
       - name: Chain next session (dispatch)
-        if: steps.dedup.outputs.active == '0'
+        if: steps.dedup.outputs.active == '0' && inputs.test_mode != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
