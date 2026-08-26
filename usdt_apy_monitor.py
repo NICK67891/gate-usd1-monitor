@@ -2,7 +2,7 @@
 """
 JustLend USDT Borrow APY monitor for GitHub Actions.
 Checks jUSDT borrow APY on JustLend via openapi.just.network.
-Sends email alert when APY exceeds 5% threshold.
+Sends email alert every 5 minutes while APY exceeds 5% threshold.
 Uses same secrets as psm_monitor: SMTP_USER / SMTP_PASS / MAIL_TO
 """
 
@@ -24,7 +24,7 @@ MARKET_PAGE = "https://app.justlend.org/marketDetailNew?jtokenAddress=TXJgMdjVX5
 
 THRESHOLD = float(os.environ.get("APY_THRESHOLD", "0.05"))  # 5%
 
-COOLDOWN_SECONDS = 1800  # 30 min
+COOLDOWN_SECONDS = 240  # 4 min: with 5-min cron, alert lands every run
 STATE_FILE = ".usdt_apy_alert_state"
 
 SMTP_USER = os.environ.get("SMTP_USER", "")
